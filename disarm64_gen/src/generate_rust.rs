@@ -19,8 +19,7 @@ fn write_prelude(_decision_tree: &DecisionTree, f: &mut impl Write) -> std::io::
         #![allow(non_snake_case, non_camel_case_types)]
         #![allow(dead_code)]
         #![allow(unused_imports)]
-
-        use bitfield_struct::bitfield;
+        #![allow(unused_macro_rules)]
 
         use disarm64_defn::InsnClass;
         use disarm64_defn::InsnFeatureSet;
@@ -52,6 +51,65 @@ fn write_prelude(_decision_tree: &DecisionTree, f: &mut impl Write) -> std::io::
 
         /// The decode table
         type DecodeTable = &'static [Decode];
+
+        /// Define instruction newtype structs with Debug impl.
+        macro_rules! define_insn_types {
+            ($($name:ident),* $(,)?) => {
+                $(
+                    #[derive(Copy, Clone, PartialEq, Eq)]
+                    pub struct $name(pub u32);
+                    impl core::fmt::Debug for $name {
+                        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                            write!(f, "{}({:#010x})", stringify!($name), self.0)
+                        }
+                    }
+                )*
+            };
+        }
+
+        /// Define DEFINITION, make_opcode, and InsnOpcode for each instruction struct.
+        macro_rules! define_insn_impls {
+            ($(
+                $name:ident(
+                    $mnemonic_str:expr, $mnemonic_ident:ident,
+                    $opcode:expr, $mask:expr,
+                    $class:ident, $feature_set:ident,
+                    $flags:expr, [$($operand:expr),* $(,)?]
+                )
+            ),* $(,)?) => {
+                $(
+                    impl $name {
+                        pub const DEFINITION: Insn = Insn {
+                            mnemonic: $mnemonic_str,
+                            aliases: &[],
+                            opcode: $opcode,
+                            mask: $mask,
+                            class: InsnClass::$class,
+                            feature_set: InsnFeatureSet::$feature_set,
+                            operands: &[$($operand),*],
+                            flags: $flags,
+                        };
+
+                        fn make_opcode(bits: u32) -> Opcode {
+                            Opcode {
+                                mnemonic: Mnemonic::$mnemonic_ident,
+                                operation: Operation::$class($class::$name($name(bits)))
+                            }
+                        }
+                    }
+
+                    impl InsnOpcode for $name {
+                        fn definition(&self) -> &'static Insn {
+                            &Self::DEFINITION
+                        }
+
+                        fn bits(&self) -> u32 {
+                            self.0
+                        }
+                    }
+                )*
+            };
+        }
 
     };
 
@@ -123,6 +181,10 @@ fn write_insn_structs(
     let mut opcode_to_used_name = std::collections::HashMap::new();
     let mut classes = HashMap::new();
 
+    // Collect all struct names and their impl data for batched macro invocations
+    let mut all_struct_names: Vec<proc_macro2::Ident> = Vec::new();
+    let mut all_impl_entries: Vec<TokenStream> = Vec::new();
+
     for insn in insns {
         let mut opcode_struct_name = insn.mnemonic.to_string();
         opcode_struct_name.make_ascii_uppercase();
@@ -166,54 +228,7 @@ fn write_insn_structs(
                 .push(opcode_struct_name.clone());
         }
 
-        let mut bit_fields = HashSet::new();
-        for operand in insn.operands.iter() {
-            for bf in operand.bit_fields.iter() {
-                let bf_name = format!("{:?}", bf.bitfield).to_lowercase();
-                let lsb = bf.lsb;
-                let width = bf.width;
-                bit_fields.insert((bf_name, lsb, width));
-            }
-        }
-        let mut bit_fields = Vec::from_iter(bit_fields);
-        bit_fields.sort_by_key(|bf| bf.1);
-        let mut opcode_fields = bit_fields.clone();
-
-        let mut last_bit = 0;
-        for (_bf_name, lsb, width) in bit_fields.iter() {
-            if *lsb != last_bit {
-                if last_bit < *lsb {
-                    let gap = *lsb - last_bit;
-                    let gap_name = format!("_op_{}", last_bit);
-                    opcode_fields.push((gap_name, last_bit, gap));
-                } else {
-                    log::warn!("Bitfields cannot be parsed for insn: {insn:x?}");
-                    opcode_fields.clear();
-                    opcode_fields.push(("_bits".to_string(), 0, 32));
-                    last_bit = 32;
-                    break;
-                }
-            }
-            last_bit = *lsb + *width;
-        }
-        if last_bit < 32 {
-            let gap = 32 - last_bit;
-            let gap_name = format!("_op_{}", last_bit);
-            opcode_fields.push((gap_name, last_bit, gap));
-        }
-        opcode_fields.sort_by_key(|bf| bf.1);
-
-        let mut opcode_fields_tokens = quote! {};
-        for (bf_name, _lsb, width) in opcode_fields.iter() {
-            let bf_name = format_ident!("{}", bf_name);
-            let width = proc_macro2::Literal::u8_unsuffixed(*width);
-            opcode_fields_tokens.extend(quote! {
-                #[bits(#width)]
-                pub #bf_name: u32,
-            });
-        }
-
-        let opcode_struct_name = format_ident!("{}", opcode_struct_name);
+        let opcode_struct_name_ident = format_ident!("{}", opcode_struct_name);
         let opcode_hex: TokenStream = format!("{:#08x}", insn.opcode).parse().unwrap();
         let mask_hex: TokenStream = format!("{:#08x}", insn.mask).parse().unwrap();
         let mnemonic = insn.mnemonic.as_str();
@@ -237,7 +252,7 @@ fn write_insn_structs(
                         bitfield: InsnBitField::#bf_name,
                         lsb: #lsb,
                         width: #width,
-                    },
+                    }
                 }
             });
 
@@ -246,12 +261,12 @@ fn write_insn_structs(
                     kind: InsnOperandKind::#kind,
                     class: InsnOperandClass::#class,
                     qualifiers: &[#(InsnOperandQualifier::#qualifiers,)*],
-                    bit_fields: &[#(#bit_fields)*],
-                },
+                    bit_fields: &[#(#bit_fields),*],
+                }
             });
         }
 
-        // Serialize flags tyo  STRING
+        // Serialize flags to STRING
         let mut flags = Vec::new();
         for flag in insn.flags.iter() {
             let str_flag = format!("{flag:?}")
@@ -270,44 +285,28 @@ fn write_insn_structs(
             }
         };
 
-        struct_definitions.extend(quote! {
-            #[bitfield(u32)]
-            #[derive(PartialEq, Eq)]
-            pub struct #opcode_struct_name {
-                #opcode_fields_tokens
-            }
-        });
+        all_struct_names.push(opcode_struct_name_ident.clone());
 
         let mnemonic_ident = format_ident!("r#{}", mnemonic.replace('.', "_"));
-        struct_impls.extend(quote! {
-            impl #opcode_struct_name {
-                pub const DEFINITION: Insn = Insn {
-                    mnemonic: #mnemonic,
-                    aliases: &[],
-                    opcode: #opcode_hex,
-                    mask: #mask_hex,
-                    class: InsnClass::#class,
-                    feature_set: InsnFeatureSet::#feature_set,
-                    operands: &[#(#insn_operands)*],
-                    flags: #flags,
-                };
-
-                fn make_opcode(bits: u32) -> Opcode {
-                    Opcode { mnemonic: Mnemonic::#mnemonic_ident, operation: Operation::#class(#class::#opcode_struct_name(#opcode_struct_name::from(bits))) }
-                }
-            }
-
-            impl InsnOpcode for #opcode_struct_name {
-                fn definition(&self) -> &'static Insn {
-                    &Self::DEFINITION
-                }
-
-                fn bits(&self) -> u32 {
-                    (*self).into()
-                }
-            }
+        all_impl_entries.push(quote! {
+            #opcode_struct_name_ident(
+                #mnemonic, #mnemonic_ident,
+                #opcode_hex, #mask_hex,
+                #class, #feature_set,
+                #flags, [#(#insn_operands),*]
+            )
         });
     }
+
+    // Emit batched struct type definitions via macro
+    struct_definitions.extend(quote! {
+        define_insn_types!(#(#all_struct_names),*);
+    });
+
+    // Emit batched impl blocks via macro (after enums are defined)
+    struct_impls.extend(quote! {
+        define_insn_impls!(#(#all_impl_entries),*);
+    });
 
     let mut sorted_classes = classes.keys().collect::<Vec<_>>();
     sorted_classes.sort_by_key(|x| x.to_string());
