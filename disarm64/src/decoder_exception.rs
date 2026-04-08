@@ -7,7 +7,7 @@
 #![allow(non_snake_case, non_camel_case_types)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
-use bitfield_struct::bitfield;
+#![allow(unused_macro_rules)]
 use disarm64_defn::defn::Insn;
 use disarm64_defn::defn::InsnOpcode;
 use disarm64_defn::defn::InsnOperand;
@@ -35,6 +35,10 @@ enum Decode {
 }
 #[doc = r" The decode table"]
 type DecodeTable = &'static [Decode];
+#[doc = r" Define instruction newtype structs with Debug impl."]
+macro_rules ! define_insn_types { ($ ($ name : ident) , * $ (,) ?) => { $ (# [derive (Copy , Clone , PartialEq , Eq)] pub struct $ name (pub u32) ; impl core :: fmt :: Debug for $ name { fn fmt (& self , f : & mut core :: fmt :: Formatter < '_ >) -> core :: fmt :: Result { write ! (f , "{}({:#010x})" , stringify ! ($ name) , self . 0) } }) * } ; }
+#[doc = r" Define DEFINITION, make_opcode, and InsnOpcode for each instruction struct."]
+macro_rules ! define_insn_impls { ($ ($ name : ident ($ mnemonic_str : expr , $ mnemonic_ident : ident , $ opcode : expr , $ mask : expr , $ class : ident , $ feature_set : ident , $ flags : expr , [$ ($ operand : expr) , * $ (,) ?])) , * $ (,) ?) => { $ (impl $ name { pub const DEFINITION : Insn = Insn { mnemonic : $ mnemonic_str , aliases : & [] , opcode : $ opcode , mask : $ mask , class : InsnClass :: $ class , feature_set : InsnFeatureSet :: $ feature_set , operands : & [$ ($ operand) , *] , flags : $ flags , } ; fn make_opcode (bits : u32) -> Opcode { Opcode { mnemonic : Mnemonic :: $ mnemonic_ident , operation : Operation :: $ class ($ class :: $ name ($ name (bits))) } } } impl InsnOpcode for $ name { fn definition (& self) -> & 'static Insn { & Self :: DEFINITION } fn bits (& self) -> u32 { self . 0 } }) * } ; }
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Mnemonic {
     r#brk,
@@ -47,94 +51,17 @@ pub enum Mnemonic {
     r#svc,
     r#udf,
 }
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct BRK_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct DCPS1_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct DCPS2_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct DCPS3_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct HLT_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct HVC_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct SMC_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct SVC_EXCEPTION {
-    #[bits(5)]
-    pub _op_0: u32,
-    #[bits(16)]
-    pub imm16_5: u32,
-    #[bits(11)]
-    pub _op_21: u32,
-}
-#[bitfield(u32)]
-#[derive(PartialEq, Eq)]
-pub struct UDF_UNDEFINED {
-    #[bits(16)]
-    pub imm16_0: u32,
-    #[bits(16)]
-    pub _op_16: u32,
-}
+define_insn_types!(
+    BRK_EXCEPTION,
+    DCPS1_EXCEPTION,
+    DCPS2_EXCEPTION,
+    DCPS3_EXCEPTION,
+    HLT_EXCEPTION,
+    HVC_EXCEPTION,
+    SMC_EXCEPTION,
+    SVC_EXCEPTION,
+    UDF_UNDEFINED
+);
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum EXCEPTION {
     BRK_EXCEPTION(BRK_EXCEPTION),
@@ -156,15 +83,16 @@ pub struct Opcode {
     pub mnemonic: Mnemonic,
     pub operation: Operation,
 }
-impl BRK_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "brk",
-        aliases: &[],
-        opcode: 0xd4200000,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+define_insn_impls!(
+    BRK_EXCEPTION(
+        "brk",
+        r#brk,
+        0xd4200000,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -173,33 +101,17 @@ impl BRK_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#brk,
-            operation: Operation::EXCEPTION(EXCEPTION::BRK_EXCEPTION(BRK_EXCEPTION::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for BRK_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl DCPS1_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "dcps1",
-        aliases: &[],
-        opcode: 0xd4a00001,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    DCPS1_EXCEPTION(
+        "dcps1",
+        r#dcps1,
+        0xd4a00001,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -208,35 +120,17 @@ impl DCPS1_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#dcps1,
-            operation: Operation::EXCEPTION(EXCEPTION::DCPS1_EXCEPTION(DCPS1_EXCEPTION::from(
-                bits,
-            ))),
-        }
-    }
-}
-impl InsnOpcode for DCPS1_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl DCPS2_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "dcps2",
-        aliases: &[],
-        opcode: 0xd4a00002,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    DCPS2_EXCEPTION(
+        "dcps2",
+        r#dcps2,
+        0xd4a00002,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -245,35 +139,17 @@ impl DCPS2_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#dcps2,
-            operation: Operation::EXCEPTION(EXCEPTION::DCPS2_EXCEPTION(DCPS2_EXCEPTION::from(
-                bits,
-            ))),
-        }
-    }
-}
-impl InsnOpcode for DCPS2_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl DCPS3_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "dcps3",
-        aliases: &[],
-        opcode: 0xd4a00003,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    DCPS3_EXCEPTION(
+        "dcps3",
+        r#dcps3,
+        0xd4a00003,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -282,35 +158,17 @@ impl DCPS3_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#dcps3,
-            operation: Operation::EXCEPTION(EXCEPTION::DCPS3_EXCEPTION(DCPS3_EXCEPTION::from(
-                bits,
-            ))),
-        }
-    }
-}
-impl InsnOpcode for DCPS3_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl HLT_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "hlt",
-        aliases: &[],
-        opcode: 0xd4400000,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    HLT_EXCEPTION(
+        "hlt",
+        r#hlt,
+        0xd4400000,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -319,33 +177,17 @@ impl HLT_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#hlt,
-            operation: Operation::EXCEPTION(EXCEPTION::HLT_EXCEPTION(HLT_EXCEPTION::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for HLT_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl HVC_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "hvc",
-        aliases: &[],
-        opcode: 0xd4000002,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    HVC_EXCEPTION(
+        "hvc",
+        r#hvc,
+        0xd4000002,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -354,33 +196,17 @@ impl HVC_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#hvc,
-            operation: Operation::EXCEPTION(EXCEPTION::HVC_EXCEPTION(HVC_EXCEPTION::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for HVC_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl SMC_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "smc",
-        aliases: &[],
-        opcode: 0xd4000003,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    SMC_EXCEPTION(
+        "smc",
+        r#smc,
+        0xd4000003,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -389,33 +215,17 @@ impl SMC_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#smc,
-            operation: Operation::EXCEPTION(EXCEPTION::SMC_EXCEPTION(SMC_EXCEPTION::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for SMC_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl SVC_EXCEPTION {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "svc",
-        aliases: &[],
-        opcode: 0xd4000001,
-        mask: 0xffe0001f,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    SVC_EXCEPTION(
+        "svc",
+        r#svc,
+        0xd4000001,
+        0xffe0001f,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::EXCEPTION,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -424,33 +234,17 @@ impl SVC_EXCEPTION {
                 lsb: 5,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#svc,
-            operation: Operation::EXCEPTION(EXCEPTION::SVC_EXCEPTION(SVC_EXCEPTION::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for SVC_EXCEPTION {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
-impl UDF_UNDEFINED {
-    pub const DEFINITION: Insn = Insn {
-        mnemonic: "udf",
-        aliases: &[],
-        opcode: 0x000000,
-        mask: 0xffff0000,
-        class: InsnClass::EXCEPTION,
-        feature_set: InsnFeatureSet::V8,
-        operands: &[InsnOperand {
+        }]
+    ),
+    UDF_UNDEFINED(
+        "udf",
+        r#udf,
+        0x000000,
+        0xffff0000,
+        EXCEPTION,
+        V8,
+        InsnFlags::empty(),
+        [InsnOperand {
             kind: InsnOperandKind::UNDEFINED,
             class: InsnOperandClass::IMMEDIATE,
             qualifiers: &[],
@@ -459,24 +253,9 @@ impl UDF_UNDEFINED {
                 lsb: 0,
                 width: 16,
             }],
-        }],
-        flags: InsnFlags::empty(),
-    };
-    fn make_opcode(bits: u32) -> Opcode {
-        Opcode {
-            mnemonic: Mnemonic::r#udf,
-            operation: Operation::EXCEPTION(EXCEPTION::UDF_UNDEFINED(UDF_UNDEFINED::from(bits))),
-        }
-    }
-}
-impl InsnOpcode for UDF_UNDEFINED {
-    fn definition(&self) -> &'static Insn {
-        &Self::DEFINITION
-    }
-    fn bits(&self) -> u32 {
-        (*self).into()
-    }
-}
+        }]
+    )
+);
 impl InsnOpcode for EXCEPTION {
     fn definition(&self) -> &'static Insn {
         match self {
