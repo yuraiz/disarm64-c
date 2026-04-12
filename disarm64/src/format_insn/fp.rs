@@ -142,7 +142,7 @@ pub(crate) fn format_fp_reg(
                 let idx = if operand.qualifiers.len() >= 3 {
                     level
                 } else {
-                    level.checked_sub(base).unwrap_or(0)
+                    level.saturating_sub(base)
                 };
                 match operand.qualifiers.get(idx).and_then(qualifier_to_fp_size) {
                     Some(fp) => get_fp_reg_name(fp, reg_no as usize),

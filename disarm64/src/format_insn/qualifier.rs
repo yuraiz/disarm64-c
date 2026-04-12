@@ -220,10 +220,8 @@ pub(crate) fn resolve_em_qualifier_idx(
             2 => {
                 if qualifiers[0] == qualifiers[1] {
                     q // Same qualifier: Q selects variant
-                } else if size >= 1 {
-                    size - 1 // Different: size-1 index
                 } else {
-                    0
+                    size.saturating_sub(1)
                 }
             }
             _ => 0,
