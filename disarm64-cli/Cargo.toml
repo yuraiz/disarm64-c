@@ -19,7 +19,7 @@ license = "Unlicense OR MIT"
 readme = "../Readme.md"
 
 [dependencies]
-disarm64 = { path = "../disarm64", version = "0.1.25" }
+disarm64 = { version = "0.1.26" }
 disarm64_defn = "0.1.12"
 
 anyhow = "1"
