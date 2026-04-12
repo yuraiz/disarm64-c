@@ -39,7 +39,8 @@ the instructions of the following groups:
 - [x] PC-relative
 - [x] System instructions (hints, system registers)
 - [x] Floating point
-- [ ] SIMD, SVE
+- [x] SIMD
+- [ ] SVE
 - [ ] SME
 
 The current effort is directed at providing the ability to perform
