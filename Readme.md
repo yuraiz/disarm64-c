@@ -1,5 +1,7 @@
 # Instruction decoder generator
 
+[![Release Binaries](https://github.com/kromych/disarm64/actions/workflows/release.yaml/badge.svg)](https://github.com/kromych/disarm64/actions/workflows/release.yaml)
+
 ## About this project
 
 This project contains a library and a tooling for generating instruction decoders

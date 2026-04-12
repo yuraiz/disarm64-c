@@ -1,0 +1,110 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - macos-arm64
+          - linux-x86_64
+          - linux-arm64
+          - linux-riscv64
+          - windows-x86_64
+          - windows-arm64
+        include:
+          - platform: macos-x86_64
+            target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: disarm64
+
+          - platform: macos-arm64
+            target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: disarm64
+
+          - platform: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: disarm64
+
+          - platform: linux-arm64
+            target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: disarm64
+
+          - platform: linux-riscv64
+            target: riscv64gc-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: disarm64
+
+          - platform: windows-x86_64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: disarm64.exe
+
+          - platform: windows-arm64
+            target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: disarm64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          args: "--locked --release --package disarm64-cli"
+          command: build
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czf ../../../disarm64-${{ matrix.platform }}.tar.gz ${{ matrix.artifact }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../disarm64-${{ matrix.platform }}.zip ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: disarm64-${{ matrix.platform }}
+          path: disarm64-${{ matrix.platform }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
