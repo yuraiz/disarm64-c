@@ -1,6 +1,6 @@
 [package]
 name = "disarm64"
-version = "0.1.25"
+version = "0.1.26"
 edition = "2021"
 authors = ["kromych <kromych@users.noreply.github.com>"]
 description = """
