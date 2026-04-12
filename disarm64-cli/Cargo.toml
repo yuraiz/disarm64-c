@@ -1,6 +1,6 @@
 [package]
 name = "disarm64-cli"
-version = "0.1.24"
+version = "0.1.25"
 edition = "2021"
 
 authors = ["kromych <kromych@users.noreply.github.com>"]
@@ -20,13 +20,13 @@ readme = "../Readme.md"
 
 [dependencies]
 disarm64 = { path = "../disarm64", version = "0.1.25" }
-disarm64_defn = "0.1.11"
+disarm64_defn = "0.1.12"
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 clap-num = "1"
 env_logger = "0.11"
-goblin = { version = "0.9", features = ["elf64", "pe64", "mach64"] }
+goblin = { version = "0.10", features = ["elf64", "pe64", "mach64"] }
 log = "0.4"
 memmap2 = "0.9"
 
