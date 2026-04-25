@@ -4,7 +4,7 @@
 /////////////////////////
 //~ yuraiz: Custom integers
 typedef unsigned long long da64_u64;
-typedef unsigned long da64_u32;
+typedef unsigned int da64_u32;
 
 //~ yuraiz: Custom counted string
 typedef struct da64_str8 da64_str8;

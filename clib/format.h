@@ -94,7 +94,6 @@ da64_u64 da64_write_op_kind(char* dest, char* dest_end, DA64_InsnOperandKind kin
 DA64_WARN_UNUSED
 da64_u64 da64_write_c_reg(char* dest, char* dest_end, da64_u64 num)
 {
-    da64_u64 written = 0;
     char* start = dest;
     dest += da64_write_strlit(dest, dest_end, "c");
     dest += da64_write_num(dest, dest_end, num, 10);
@@ -114,7 +113,6 @@ DA64_WARN_UNUSED
 da64_u64 da64_write_signed_imm(char* dest, char* dest_end, signed long long num)
 {
     char* start = dest;
-    dest += da64_write_strlit(dest, dest_end, "#");
     if (num < 0) {
         dest += da64_write_strlit(dest, dest_end, "-");
         num = -num;
@@ -163,7 +161,7 @@ da64_u64 da64_write_double(char* dest, char* dest_end, double num)
 
 da64_str8 da64_cond_name(da64_u32 cond)
 {
-    static const char COND_TABLE[16][2] = {
+    static const char COND_TABLE[16][3] = {
         "eq",
         "ne",
         "cs",
@@ -206,7 +204,7 @@ da64_u64 da64_sign_extend(da64_u32 v, da64_u32 n)
     da64_u64 mask = 1llu << n;
 
     // Sign-extend by utilizing the fact that shifting into the sign bit replicates the bit.
-    return (v ^ mask) - mask;
+    return (v_u64 ^ mask) - mask;
 }
 
 // Decode a logical immediate value, N:immr:imms.
@@ -560,7 +558,7 @@ da64_u64 da64_resolve_em_qualifier_idx(DA64_InsnOperandQualifier* qualifiers, da
     if (flags & DA64_InsnFlag_HAS_ADVSIMD_SCALAR_SIZE) {
         // FP [S_S,S_D] with bit23 constrained: use bit22 alone
 
-        da64_u32 is_fp_scalar = (qualifier_count == 2) && (qualifiers[0] == DA64_InsnOperandQualifier_S_S) && (((mask >> 32) & 1) != 0);
+        da64_u32 is_fp_scalar = (qualifier_count == 2) && (qualifiers[0] == DA64_InsnOperandQualifier_S_S) && (((mask >> 23) & 1) != 0);
 
         if (is_fp_scalar) {
             return da64_bit_range(bits, 22, 1);
@@ -697,7 +695,7 @@ da64_u64 da64_format_fp_reg(da64_u32 bits, DA64_InsnOperand* operand, const DA64
             da64_u64 size = da64_bit_range(bits, 22, 2);
             da64_u32 is_fp_scalar = (operand->qualifier_count == 2)
                 && (operand->qualifiers[0] == DA64_InsnOperandQualifier_S_S)
-                && (((definition->mask >> 32) & 1) != 0);
+                && (((definition->mask >> 23) & 1) != 0);
 
             da64_u64 idx = -1;
             if (is_fp_scalar) {
@@ -1295,7 +1293,7 @@ da64_u64 da64_format_simd_element_em(da64_u32 bits, DA64_InsnOperand* operand, c
         da64_u32 h = da64_bit_range(bits, 11, 1);
         da64_u32 l = da64_bit_range(bits, 21, 1);
         da64_u32 index = (h << 1) | l;
-        da64_u32 reg_no = reg_no & 0xF;
+        reg_no = reg_no & 0xF;
 
         char* start = buf;
 
@@ -1312,7 +1310,7 @@ da64_u64 da64_format_simd_element_em(da64_u32 bits, DA64_InsnOperand* operand, c
         da64_u32 h = da64_bit_range(bits, 11, 1);
         da64_u32 l = da64_bit_range(bits, 21, 1);
         da64_u32 index = (h << 1) | l;
-        da64_u32 reg_no = reg_no & 0xF;
+        reg_no = reg_no & 0xF;
 
         char* start = buf;
 
@@ -1706,7 +1704,6 @@ da64_u32 da64_format_operand_reg_ext(da64_u32 bits, char* buf, char* buf_end)
     da64_u32 imm3 = da64_bit_range(bits, 10, 3);
     da64_u32 option = da64_bit_range(bits, 13, 3);
     da64_u32 regm = da64_bit_range(bits, 16, 5);
-    da64_u32 opcode_bits = da64_bit_range(bits, 21, 10);
     da64_u32 sf = da64_bit_range(bits, 31, 1);
 
     if (imm3 > 4) {
@@ -1767,18 +1764,14 @@ da64_u32 da64_format_operand_reg_ext(da64_u32 bits, char* buf, char* buf_end)
     }
 
     return buf - start;
-};
+}
 
 // Format a register with shift operand.
 da64_u32 da64_format_operand_reg_shift(da64_u32 bits, char* buf, char* buf_end)
 {
-    da64_u32 regd = da64_bit_range(bits, 0, 5);
-    da64_u32 regn = da64_bit_range(bits, 5, 5);
     da64_u32 imm6 = da64_bit_range(bits, 10, 6);
     da64_u32 regm = da64_bit_range(bits, 16, 5);
-    da64_u32 zero = da64_bit_range(bits, 21, 1);
     da64_u32 shift = da64_bit_range(bits, 23, 2);
-    da64_u32 opcode_bits = da64_bit_range(bits, 30, 7);
     da64_u32 sf = da64_bit_range(bits, 31, 1);
 
     if (sf == 0 && (imm6 & 0x20) != 0) {
@@ -1820,7 +1813,6 @@ da64_u32 da64_format_operand_reg_shift(da64_u32 bits, char* buf, char* buf_end)
 da64_u32 da64_format_operand(da64_u64 pos, da64_u64 pc, da64_u32 bits, DA64_InsnOperand* operand, const DA64_Insn* definition, da64_u32* stop, char* buf, char* buf_end)
 {
     DA64_InsnOperandKind kind = operand->kind;
-    da64_u64 written = 0;
 
     switch (kind) {
     default: {
@@ -2354,8 +2346,8 @@ da64_u32 da64_format_operand(da64_u64 pos, da64_u64 pc, da64_u32 bits, DA64_Insn
                 return da64_write_imm(buf, buf_end, imm8);
             }
         }
-        if (((cmode & 0b1101) == 0b1000)
-            || ((cmode & 0b1101) == 0b1001)) {
+        if (((cmode & 13) == 8)
+            || ((cmode & 13) == 9)) {
             da64_u64 lsl = da64_bit_set(cmode, 1) ? 8 : 0;
             if (lsl != 0) {
                 char* start = buf;
@@ -2367,7 +2359,7 @@ da64_u32 da64_format_operand(da64_u64 pos, da64_u64 pc, da64_u32 bits, DA64_Insn
                 return da64_write_imm(buf, buf_end, imm8);
             }
         }
-        if ((cmode >> 1) == 0b111) {
+        if ((cmode >> 1) == 7) {
             return da64_write_imm(buf, buf_end, imm8);
         }
     } break;
@@ -2508,7 +2500,7 @@ da64_u32 da64_format_operand(da64_u64 pos, da64_u64 pc, da64_u32 bits, DA64_Insn
         da64_u32 size = da64_bit_range(bits, 30, 2);
         da64_u32 shift = da64_bit_set(bits, 12);
 
-        da64_u32 is_64bit = option == 0b011 || option == 0b111;
+        da64_u32 is_64bit = option == 3 || option == 7;
 
         da64_u32 fp = da64_bit_set(bits, 26);
         da64_u32 scale = size;

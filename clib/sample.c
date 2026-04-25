@@ -2,7 +2,7 @@
 
 #include "disarm64.h"
 
-int main()
+int main(int argc, char** argv)
 {
     DA64_Opcode opcode = { 0 };
     char buf[2048] = { 0 };

@@ -13,7 +13,10 @@ use std::rc::Rc;
 fn write_prelude(_decision_tree: &DecisionTree, f: &mut impl Write) -> std::io::Result<()> {
     writeln!(
         f,
-        r#"// Auto-generated.
+        r#"#ifndef DA64_GENERATED_H
+#define DA64_GENERATED_H
+
+// Auto-generated.
 // The changes will be LOST.
 "#
     )?;
@@ -358,10 +361,16 @@ pub fn decision_tree_to_c(
 DA64_Opcode da64_decode(da64_u32 insn) {{
     {}
     DA64_Opcode error = {{ 0 }};
-    printf(\"Failed to decode %lx\\n\", insn);
     return error;
 }}
 ",
         decoder.join("\n")
+    )?;
+
+    writeln!(
+        f,
+        r#"
+#endif // DA64_GENERATED_H
+    "#
     )
 }

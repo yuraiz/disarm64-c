@@ -28,17 +28,15 @@ static const da64_str8 DA64_REG_NUM_TABLE[32] = {
 };
 // clang-format on
 
-typedef enum DA64_FpRegSize DA64_FpRegSize;
-enum DA64_FpRegSize {
+typedef enum DA64_FpRegSize {
     DA64_FpRegSize_B8,
     DA64_FpRegSize_H16,
     DA64_FpRegSize_S32,
     DA64_FpRegSize_D64,
     DA64_FpRegSize_Q128,
-};
+} DA64_FpRegSize;
 
-typedef enum DA64_SimdRegArrangement DA64_SimdRegArrangement;
-enum DA64_SimdRegArrangement {
+typedef enum DA64_SimdRegArrangement {
     DA64_SimdRegArrangement_Vector8B,
     DA64_SimdRegArrangement_Vector16B,
     DA64_SimdRegArrangement_Vector2H,
@@ -49,7 +47,7 @@ enum DA64_SimdRegArrangement {
     DA64_SimdRegArrangement_Vector1D,
     DA64_SimdRegArrangement_Vector2D,
     DA64_SimdRegArrangement_Vector1Q,
-};
+} DA64_SimdRegArrangement;
 
 da64_reg
 da64_get_int_reg(da64_u32 is_64, da64_u32 reg_no, da64_u32 with_zr)
