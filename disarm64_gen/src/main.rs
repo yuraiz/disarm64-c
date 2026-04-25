@@ -7,12 +7,14 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::generate_c::decision_tree_to_c;
 use crate::generate_graphviz_dot::decistion_tree_to_graphviz_dot;
 use crate::generate_rust::decision_tree_to_rust;
 use decision_tree::build_decision_tree;
 use decision_tree::DecisionTreeIndexing;
 
 mod decision_tree;
+mod generate_c;
 mod generate_graphviz_dot;
 mod generate_rust;
 mod generate_test_bin;
@@ -53,6 +55,9 @@ struct CommandLine {
     /// Generate the decoder implemented in Rust.
     #[clap(short, long)]
     rs_file: Option<PathBuf>,
+    /// Generate the decoder implemented in C.
+    #[clap(long)]
+    c_file: Option<PathBuf>,
     /// Generate a test binary.
     #[clap(short, long)]
     test_bin: Option<PathBuf>,
@@ -122,6 +127,12 @@ fn main() -> anyhow::Result<()> {
         log::info!("Writing decision tree to a Rust file {rust:?}");
         let mut f = std::fs::File::create(rust)?;
         decision_tree_to_rust(&decision_tree, decision_tree_indexing, &mut f)?;
+    }
+
+    if let Some(c) = opt.c_file {
+        log::info!("Writing decision tree to a C file {c:?}");
+        let mut f = std::fs::File::create(c)?;
+        decision_tree_to_c(&decision_tree, decision_tree_indexing, &mut f)?;
     }
 
     if let Some(test_bin) = opt.test_bin {
